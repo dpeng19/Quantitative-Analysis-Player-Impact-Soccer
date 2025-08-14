@@ -27,21 +27,26 @@ from socceraction.atomic import spadl
 from socceraction.spadl.schema import SPADLSchema
 import socceraction.spadl.opta
 import pandas as pd
-import scrape_event_data
+
 import sys
 import os
 import importlib
 
-import sys
-import os
+# Build path to 'helpers' directory
+cwd = os.getcwd()
+helpers_path = os.path.join(cwd, 'helpers')
 
-central_path = os.path.abspath(os.path.join(os.getcwd()))
-
+# Add to sys.path so Python can find your modules
 sys.path.append(helpers_path)
 
+# Import helpers
+import possession_chains
+import scrape_event_data
 
-#force update helpers
+#reload when necessary
 importlib.reload(scrape_event_data)
+importlib.reload(possession_chains)
+
 
 
 
@@ -105,67 +110,8 @@ df['kicked_out'] = (((df['end_x'] == 0) | (df['end_x'] == 105) | (df['end_y'] ==
                     & (~df['type_id'].isin(shot_ids)))
 df['kicked_out'].value_counts()
 
-def isolateChains(df):
-    """
-    Parameters
-    ----------
-    df : dataframe
-        dataframe with Wyscout event data.
-
-    Returns
-    -------
-    df: dataframe
-        dataframe with isolated possesion chains
-
-    """
-    #potential +0s
-    chain_team = df.iloc[0]["team_id"]
-    period = df.iloc[0]["period_id"]
-    stop_criterion = 0
-    chain = 0
-    df["possesion_chain"] = 0
-    df["possesion_chain_team"] = 0
-    count = 0;
-    for i, row in df.iterrows():
-        #add value
-        df.at[i, "possesion_chain"] = chain
-        df.at[i, "possesion_chain_team"] = chain_team
-        #if shot, offside, or foul, add 2 to stop criteriom
-        if row["type_id"] in shot_ids or row["result_id"] == 2 or row["type_id"] == 8:
-                stop_criterion += 2
-        
-        #if ball out of field, add 2
-        if row["kicked_out"] == 1:
-                stop_criterion += 2
-        #maybe
-        #if row['team_id'] != row['next_team_id'] & row['next_type_id] != 8
-        #maybe also for interception/tackle change possession if successful, even if team after  defensive action is the same
-        #should add also if not period end (&row["period_id"] == period)
-        #like so: if row['team_id'] != row['next_team_id'] & row["period_id"] == period:
-        #why adding 2 to possesion chain value?
-        if (row['team_id'] != row['next_team_id']) & (row["next_period_id"] == period):
-            stop_criterion += 2
-        #criterion for stopping when half ended
-        if row["period_id"] != period:
-                chain += 1
-                if row['team_id'] != row['next_team_id']:
-                    stop_criterion += 2;
-                else:
-                  stop_criterion = 0
-                chain_team = row['team_id']
-                period = row["period_id"]
-                df.at[i, "possesion_chain"] = chain
-                df.at[i, "possesion_chain_team"] = chain_team
-        #possesion chain ended
-        if stop_criterion >= 2:
-            chain += 1
-            stop_criterion = 0
-            chain_team = row['next_team_id']
-        count = count + 1
-        print(count)
-    return df
-
-poss = isolateChains(df)
+#isolate possession chains
+poss = possession_chains.isolate_chains(df)
 
 #---- reorder columns ----
 col1 = 'possesion_chain'
@@ -174,7 +120,6 @@ col3 = 'type_id'
 col4 = 'type'
 cols = poss.columns.tolist()
 
-# Remove the columns
 cols.remove(col1)
 cols.remove(col2)
 cols.remove(col3)
