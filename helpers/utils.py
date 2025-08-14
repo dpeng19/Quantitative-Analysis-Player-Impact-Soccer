@@ -11,7 +11,7 @@ import textdistance
 def get_player_mappings(df1, df2):
     """
     Creates a standardized player mapping of the player names across WhoScored and Understat.
-    Uses fuzzy string matching, specifically Jaro-Winkler to help match players 
+    Uses fuzzy string matching, specifically Jaro-Winkler, to help match players 
     if no exact match is found. 
     
 
