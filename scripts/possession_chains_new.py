@@ -42,10 +42,12 @@ sys.path.append(helpers_path)
 # Import helpers
 import possession_chains
 import scrape_event_data
+import utils
 
 #reload when necessary
 importlib.reload(scrape_event_data)
 importlib.reload(possession_chains)
+importlib.reload(utils)
 
 
 
@@ -169,6 +171,10 @@ merged_shots = pd.merge(
     on = ['player_id'],
     how='left'
 )
+
+#standardize player names across two sources for shots
+player_mapping = utils.get_player_mappings(shots_merge, merged_shots)
+
 
 #---- debug -----
 '''
