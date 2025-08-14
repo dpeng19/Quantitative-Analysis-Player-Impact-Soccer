@@ -138,6 +138,8 @@ poss2['team_equal'].value_counts()
 
 
 shots_merge = merged_df[merged_df.type_id.isin([11, 12, 13])]
+shots_merge = shots_merge.reset_index(drop=True)
+
 #---- ensure the types of shots look right, throw error otherwise ----
 # Define the allowed shot types
 allowed_types = {'SavedShot', 'MissedShots', 'Goal', 'ShotOnPost'}
@@ -150,6 +152,23 @@ unexpected_types = actual_types - allowed_types
 
 if unexpected_types:
     raise ValueError(f"Unexpected shot types found: {unexpected_types}")
+
+
+#---- pull shots from understat, which has expected goals, want to match the shots ----
+ws = sd.Understat("ENG-Premier League", seasons=2024)
+season_shots = ws.read_shot_events()
+sorted_shots = season_shots.groupby('game_id', sort = False, group_keys=False).apply(lambda x: x.sort_values('minute')).reset_index(drop=True)
+#remove own goals
+sorted_shots = sorted_shots.loc[sorted_shots['result'] != 'Own Goal']
+player_season_stats = ws.read_player_season_stats()
+player_season_stats = player_season_stats.reset_index()
+#merge to add player name info to understat shots
+merged_shots = pd.merge(
+    sorted_shots,
+    player_season_stats[['player_id', 'player']],
+    on = ['player_id'],
+    how='left'
+)
 
 #---- debug -----
 '''
