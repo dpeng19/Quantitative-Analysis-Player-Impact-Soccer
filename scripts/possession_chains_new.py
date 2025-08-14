@@ -135,6 +135,22 @@ poss2 = poss[cols]
 poss2['team_equal'] = poss2['possesion_chain_team'] == poss2['team_id']
 #check to make sure everything is right
 poss2['team_equal'].value_counts()
+
+
+shots_merge = merged_df[merged_df.type_id.isin([11, 12, 13])]
+#---- ensure the types of shots look right, throw error otherwise ----
+# Define the allowed shot types
+allowed_types = {'SavedShot', 'MissedShots', 'Goal', 'ShotOnPost'}
+
+# Get the actual types present in the DataFrame
+actual_types = set(shots_merge['type'].unique())
+
+# Check for unexpected types
+unexpected_types = actual_types - allowed_types
+
+if unexpected_types:
+    raise ValueError(f"Unexpected shot types found: {unexpected_types}")
+
 #---- debug -----
 '''
 not_equal = poss2[poss2.team_equal == 0]
@@ -253,36 +269,6 @@ bad_pass = bad_pass.drop(out_pass.index)
 out_pass = bad_pass.loc[(bad_pass['end_x'] == 0) | (bad_pass['end_x'] == 105) | (bad_pass['end_y'] == 68) | (bad_pass['end_y'] == 0)]
 out_pass_2 = events_spadl.loc[(events_spadl.type_id == 0) & ((events_spadl['end_x'] == 0) | (events_spadl['end_x'] == 105) | (events_spadl['end_y'] == 68) | (events_spadl['end_y'] == 0))]
 
-test_game = season_events[:1580]
-soccerdata/data/WhoScored/events/ENG-Premier League_2425/1821049.json"
-from kloppy import statsperform
-
-dataset = statsperform.load_event(
-    ma1_data="soccerdata/data/WhoScored/events/ENG-Premier League_2425/1821049.json",
-    ma3_data="soccerdata/data/WhoScored/events/ENG-Premier League_2425/1821049.json",
-
-    # Optional arguments
-    coordinates="opta",    
-    pitch_length=102.5,
-    pitch_width=69.0,
-    event_types=["pass", "shot"],
-)
-spadl_repres = socceraction.spadl.opta.convert_to_actions(test_game, 32)
-ws = sd.WhoScored(leagues='ENG-Premier League', seasons=2024)
-actions = ws.read_events(match_id=1821049)
-loader = ws.read_events(output_fmt='loader')
-df_players = loader.players(game_id=1821049)
-df_players.to_json('1821049.json') # indent for pretty-printing
-dataset = statsperform.load_event(
-    ma1_data=".spyder-py3/Soccer_Analytics/1821049.json",
-    ma3_data="soccerdata/data/WhoScored/events/ENG-Premier League_2425/1821049.json",
-    
-    # Optional arguments
-    coordinates="opta",    
-    pitch_length=102.5,
-    pitch_width=69.0,
-    event_types=["pass", "shot"],
-)
 
 actions.head()
 mod = socceraction.spadl.play_left_to_right(actions, 32)
