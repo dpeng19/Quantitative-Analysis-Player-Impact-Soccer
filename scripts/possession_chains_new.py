@@ -32,8 +32,13 @@ import sys
 import os
 import importlib
 
-central_path = os.path.abspath(os.path.join(os.getcwd(), '..'))
-sys.path.append(os.path.join(central_path, 'helpers'))
+import sys
+import os
+
+central_path = os.path.abspath(os.path.join(os.getcwd()))
+
+sys.path.append(helpers_path)
+
 
 #force update helpers
 importlib.reload(scrape_event_data)
@@ -41,28 +46,24 @@ importlib.reload(scrape_event_data)
 
 
 #24/25 epl event data
-season_events = scrape_event_data.get_event_data('ENG-Premier League', 2024)
-events_spadl = scrape_event_data.get_event_data('ENG-Premier League', 2024, 'spadl')
+season_events = scrape_event_data.get_event_data(
+    leagues='ENG-Premier League', 
+    seasons=2024, 
+)
+events_spadl = scrape_event_data.get_event_data(
+    leagues='ENG-Premier League', 
+    seasons=2024, 
+    output_fmt='spadl',
+)
 
-#24/25 epl event data
-season_events = pd.read_csv('ENG-Premier League_events_24.csv')
-events_spadl = pd.read_csv('ENG-Premier League_spadl_events_24.csv')
-atomic_spadl =  pd.read_csv('ENG-Premier League_atomic_spadl_events_24.csv')
-atomic_spadl['type_id'].value_counts()
-atomic_out = atomic_spadl[atomic_spadl.type_id == 25]
-events_spadl["prev_type_id"] = events_spadl.shift(1, fill_value=0)["type_id"]
-events_spadl["prev_result_id"] = events_spadl.shift(1, fill_value=0)["result_id"]
-events_spadl["prev_team_id"] = events_spadl.shift(1, fill_value=0)["team_id"]
-events_spadl["next_type_id"] = events_spadl.shift(-1, fill_value=0)["type_id"]
-events_spadl["next_result_id"] = events_spadl.shift(-1, fill_value=0)["result_id"]
-events_spadl["next_team_id"] = events_spadl.shift(-1, fill_value=0)["team_id"]
-
-wierd_22 = events_spadl[events_spadl.type_id == 22]
-type_21 = events_spadl[events_spadl.type_id == 21]
-no_event = events_spadl[events_spadl['original_event_id'].isnull()]
-no_event['same_team'] = no_event['prev_team_id'] == no_event['next_team_id']
-no_event['same_team'].value_counts()
-wierd_21 = type_21.drop(no_event.index)
+#more info into the actions
+merged_df = pd.merge(
+    events_spadl,
+    season_events[['game_id', 'event_id', 'minute', 'second', 'expanded_minute', 'type', 'qualifiers']],
+    left_on=['game_id', 'original_event_id'],
+    right_on=['game_id', 'event_id'],
+    how='left'
+)
 
 # Define pass-like actions (first 7 types)
 pass_like_ids = [0, 1, 2, 3, 4, 5, 6]
@@ -73,14 +74,15 @@ shot_ids = [11, 12, 13]
 non_offensive_ids = [9, 10, 18, 21]
 # Define goalkeeper actions
 gk_ids = [14, 15, 16, 17]
-non_offensive_actions = events_spadl[events_spadl.type_id.isin(non_offensive_ids)]
-gk_actions = events_spadl[events_spadl.type_id.isin(gk_ids)]
+non_offensive_actions = merged_df[merged_df.type_id.isin(non_offensive_ids)]
+gk_actions = merged_df[merged_df.type_id.isin(gk_ids)]
 #check
-non_offensive_actions['type_id'].value_counts()
-gk_actions.type_id.value_counts()
+non_offensive_actions.type.value_counts()
+gk_actions.type.value_counts()
 #drop non-offensive and goalkeeper actoins
-df = events_spadl.drop(non_offensive_actions.index)
+df = merged_df.drop(non_offensive_actions.index)
 df = df.drop(gk_actions.index)
+df.type.value_counts()
 df["prev_type_id"] = df.shift(1, fill_value=0)["type_id"]
 df["prev_result_id"] = df.shift(1, fill_value=0)["result_id"]
 df["prev_team_id"] = df.shift(1, fill_value=0)["team_id"]
@@ -164,17 +166,24 @@ def isolateChains(df):
     return df
 
 poss = isolateChains(df)
-col1 = 'possesion_chain'
-col2 = "possesion_chain_team"
-cols = df.columns.tolist()
 
-# Remove the column you want to move
+#---- reorder columns ----
+col1 = 'possesion_chain'
+col2 = 'possesion_chain_team'
+col3 = 'type_id'
+col4 = 'type'
+cols = poss.columns.tolist()
+
+# Remove the columns
 cols.remove(col1)
 cols.remove(col2)
+cols.remove(col3)
+cols.remove(col4)
 
-# Insert it at the 3rd position (index 2 since Python uses 0-based indexing)
 cols.insert(6, col1)
 cols.insert(7, col2)
+cols.insert(8, col3)
+cols.insert(9, col4)
 
 # Reorder the DataFrame
 poss2 = poss[cols]
