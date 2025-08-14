@@ -25,8 +25,28 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from scipy.stats import binned_statistic_2d
 
+import sys
+import os
+import importlib
+
+# Build path to 'helpers' directory
+cwd = os.getcwd()
+helpers_path = os.path.join(cwd, 'helpers')
+
+# Add to sys.path so Python can find your modules
+sys.path.append(helpers_path)
+
+#Import helpers
+import scrape_event_data
+
+#reload when necessary
+importlib.reload(scrape_event_data)
+
 #24/25 epl event data
-season_events = pd.read_csv('epl_events_24.csv')
+season_events = scrape_event_data.get_event_data(
+    leagues='ENG-Premier League', 
+    seasons=2024, 
+)
 #all passes for the season
 pass_df = season_events.loc[season_events['type'] == 'Pass']
 
