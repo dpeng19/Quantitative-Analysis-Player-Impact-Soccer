@@ -7,6 +7,7 @@ Created on Thu Aug 14 18:19:23 2025
 import pandas as pd
 import re
 import textdistance
+from datetime import datetime
 
 def get_player_mappings(df1, df2):
     """
@@ -71,3 +72,52 @@ def get_player_mappings(df1, df2):
             #print(players_1.loc[i, "player"] + ' ' + best_name +' '+ str(max_score))
             players_2.at[best_index, "check"] = 2
     return players_1[['player', 'name_2']]
+
+
+# Validation function for dates
+def is_valid_date(date_str):
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+    
+def get_standardized_game_idx(sch1, sch2):
+    """
+    Aligns two game schedules by standardizing the 'game_idx' column across both DataFrames.
+
+    Parameters:
+        sch1 (pd.DataFrame): Reference schedule containing correct 'game_idx' values.
+        sch2 (pd.DataFrame): Secondary schedule to be updated with standardized 'game_idx'.
+
+    Returns:
+        tuple[pd.DataFrame, pd.DataFrame]: A tuple containing the updated sch1 and sch2 DataFrames.
+    
+    """
+    
+    sch2['game_idx'] = -1
+    
+    for i in range(len(sch1)):
+        check = 0
+        for j in range(len(sch2)):
+            if sch2.loc[j, "game_idx"] != -1:
+                continue
+            if sch1.loc[i, "game"] == sch2.loc[j, "game"]:
+                check = 1
+                sch2.at[j, "game_idx"] = sch1.loc[i, "game_idx"]
+                break
+        if check == 0:
+            max_score = 0
+            best_index = -1
+            for j in range(len(sch2)):
+                if sch2.loc[j, "game_idx"] != -1:
+                    continue
+                if sch1.loc[i, "date_only"] == sch2.loc[j, "date_only"]:
+                    sim_score = textdistance.jaro_winkler(sch1.loc[i, "game"], sch2.loc[j, "game"])
+                    if sim_score > max_score:
+                        max_score = sim_score
+                        best_index = j
+                        
+            sch2.at[best_index, "game_idx"] = sch1.loc[i, "game_idx"]
+    return sch1, sch2
+    
