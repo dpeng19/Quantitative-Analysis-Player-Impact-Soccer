@@ -19,7 +19,7 @@ from itertools import combinations_with_replacement
 from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 import numpy as np
-
+from datetime import datetime
 
 from pathlib import Path
 import socceraction
@@ -157,12 +157,12 @@ if unexpected_types:
 
 
 #---- pull shots from understat, which has expected goals, want to match the shots ----
-ws = sd.Understat("ENG-Premier League", seasons=2024)
-season_shots = ws.read_shot_events()
+us = sd.Understat("ENG-Premier League", seasons=2024)
+season_shots = us.read_shot_events()
 sorted_shots = season_shots.groupby('game_id', sort = False, group_keys=False).apply(lambda x: x.sort_values('minute')).reset_index(drop=True)
 #remove own goals
 sorted_shots = sorted_shots.loc[sorted_shots['result'] != 'Own Goal']
-player_season_stats = ws.read_player_season_stats()
+player_season_stats = us.read_player_season_stats()
 player_season_stats = player_season_stats.reset_index()
 #merge to add player name info to understat shots
 merged_shots = pd.merge(
@@ -174,6 +174,37 @@ merged_shots = pd.merge(
 
 #standardize player names across two sources for shots
 player_mapping = utils.get_player_mappings(shots_merge, merged_shots)
+
+
+#pull schedules to standardize game_id
+understat_schedule = us.read_schedule().reset_index()
+
+ws = sd.WhoScored("ENG-Premier League", seasons=2024)
+whoscored_schedule = ws.read_schedule().reset_index()
+
+#get only date
+understat_schedule['date_only'] =  understat_schedule.game.apply(lambda x: x.split(' ')[0])
+whoscored_schedule['date_only'] = whoscored_schedule.game.apply(lambda x: x.split(' ')[0])
+
+# ---- check for valid dates in the schedules----
+
+
+
+# Validation function for dates
+def is_valid_date(date_str):
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+# Apply and check all at once
+for df in [understat_schedule, whoscored_schedule]:
+    if not df['date_only'].apply(is_valid_date).all():
+        raise ValueError("One or more dates are invalid.")
+
+print("All dates are valid.")
+
 
 
 #---- debug -----
