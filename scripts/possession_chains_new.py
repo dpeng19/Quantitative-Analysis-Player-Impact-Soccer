@@ -206,6 +206,46 @@ for df in [understat_schedule, whoscored_schedule]:
 print("All dates are valid.")
 
 
+#---- standardize game_id column for merging two dataframes ----
+whoscored_schedule['game_idx'] = whoscored_schedule.index
+understat_schedule['game_idx'] = -1
+for i in range(len(whoscored_schedule)):
+    check = 0
+    for j in range(len(understat_schedule)):
+        if understat_schedule.loc[j, "game_idx"] != -1:
+            continue
+        if whoscored_schedule.loc[i, "game"] == understat_schedule.loc[j, "game"]:
+            check = 1
+            understat_schedule.at[j, "game_idx"] = whoscored_schedule.loc[i, "game_idx"]
+            break
+    if (check == 0):
+        max_score = 0
+        best_index = -1
+        for j in range(len(understat_schedule)):
+            if understat_schedule.loc[j, "game_idx"] != -1:
+                continue
+            if whoscored_schedule.loc[i, "date_only"] == understat_schedule.loc[j, "date_only"]:
+                sim_score = textdistance.jaro_winkler(whoscored_schedule.loc[i, "game"], understat_schedule.loc[j, "game"])
+                if (sim_score > max_score):
+                    max_score = sim_score
+                    best_index = j
+                    
+        understat_schedule.at[best_index, "game_idx"] = whoscored_schedule.loc[i, "game_idx"]
+            
+merged_shots = pd.merge(
+    merged_shots,
+    understat_schedule[['game_id', 'game_idx', 'home_team', 'away_team']],
+    on = 'game_id',
+    how = 'left'
+)
+
+shots_merge = pd.merge(
+    shots_merge,
+    ws_wsc[['game_id', 'game_idx', 'home_team', 'away_team']],
+    on = 'game_id', 
+    how = 'left'
+)       
+
 
 #---- debug -----
 '''
