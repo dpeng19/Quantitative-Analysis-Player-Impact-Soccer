@@ -217,6 +217,113 @@ shots_merge = pd.merge(
     how = 'left'
 )       
 
+#---- check if game_id, player, and minute uniquely identifies a shot event ----
+merge_shots_group = merged_shots.groupby(["game_idx", "player", "minute"]).size().reset_index(name = 'count')
+
+#same = merge_shots_group.loc[merge_shots_group['count'] > 1]
+#shots that are not uniquely identified by game_id, player, and minute
+'''
+check_same_shot= pd.merge(
+    merged_shots,
+    same,
+    on = ['game_idx', 'player', 'minute']
+    
+    )
+'''
+#scale to whoscored coordinate system
+merged_shots['scale_x'] = merged_shots['location_x'] * 105
+merged_shots['scale_y'] = merged_shots['location_y'] * 68
+
+shots_merge['xg'] = -1.0
+shots_merge['minute_2'] = -1
+shots_merge['player_2'] = ''
+shots_merge['x_2'] = -1.0
+shots_merge['y_2'] = -1.0
+for i in range(len(player_mapping)):
+    #use mapping previously created to get only players with this name
+    shots_1 = shots_merge.loc[shots_merge.player == player_mapping.loc[i, "player"]].copy().sort_values(by = ['game_idx', 'minute'])
+    shots_2 = merged_shots.loc[merged_shots.player == player_mapping.loc[i, "name_2"]].copy().sort_values(by = ['game_idx', 'minute'])
+    shots_2['check'] = 0
+    for j, row in shots_1.iterrows():
+        check = 0
+        for k, row2 in shots_2.iterrows():
+            if row2["check"] != 0:
+                continue
+            if row2["game_idx"] > row["game_idx"]:
+                break
+            if row2["game_idx"] == row["game_idx"] and row2["minute"] == row["minute"]:
+                if merge_shots_group.loc[(merge_shots_group.game_idx == row2["game_idx"]) & 
+                    (merge_shots_group.player == player_mapping.loc[i, "name_2"]) & (merge_shots_group.minute == row2["minute"])]['count'].values[0] > 1:
+                    #candidate shots 
+                    poss_shots = shots_2.loc[(shots_2.game_idx == row2["game_idx"]) & 
+                         (shots_2.minute == row2["minute"])][['scale_x', 'scale_y']]
+                    poss_shots['dist_away'] = (poss_shots['scale_x'] - row["start_x"])**2 + (poss_shots['scale_y'] - row["start_y"])**2
+                    closest_shot = poss_shots.loc[poss_shots['dist_away'].idxmin()]
+                    closest_idx = poss_shots['dist_away'].idxmin()
+                    
+                    check = 1
+                    shots_2.at[closest_idx, "check"] = 1
+                    shots_merge.at[j, "xg"] = shots_2.loc[closest_idx, "xg"]
+                    shots_merge.at[j, "minute_2"] = shots_2.loc[closest_idx, "minute"]
+                    shots_merge.at[j, "player_2"] = shots_2.loc[closest_idx, "player"]
+                    shots_merge.at[j, "x_2"] = shots_2.loc[closest_idx, "scale_x"]
+                    shots_merge.at[j, "y_2"] = shots_2.loc[closest_idx, "scale_y"]
+                    break
+                else:
+                    check = 1
+                    shots_2.at[k, "check"] = 1
+                    #get xg
+                    shots_merge.at[j, "xg"] = row2["xg"]
+                    #get additional info
+                    shots_merge.at[j, "minute_2"] = row2["minute"]
+                    shots_merge.at[j, "player_2"] = row2["player"]
+                    shots_merge.at[j, "x_2"] = row2["scale_x"]
+                    shots_merge.at[j, "y_2"] = row2["scale_y"]
+                    break
+        if check == 0:
+            for k, row2 in shots_2.iterrows():
+                if row2["check"] != 0:
+                    continue
+                if row2["game_idx"] > row["game_idx"]:
+                    break
+                if row2["game_idx"] == row["game_idx"] and ((row2["minute"] == row["minute"] + 1 and row['second'] >= 55) or (row2["minute"] == row["minute"] - 1 and row['second'] <= 5)):
+                    
+                    if merge_shots_group.loc[(merge_shots_group.game_idx == row2["game_idx"]) & 
+                        (merge_shots_group.player == player_mapping.loc[i, "name_2"]) & (merge_shots_group.minute == row2["minute"])]['count'].values[0] > 1:
+                        #candidate shots 
+                        poss_shots = shots_2.loc[(shots_2.game_idx == row2["game_idx"]) & 
+                             (shots_2.minute == row2["minute"])][['scale_x', 'scale_y']]
+                        poss_shots['dist_away'] = (poss_shots['scale_x'] - row["start_x"])**2 + (poss_shots['scale_y'] - row["start_y"])**2
+                        closest_shot = poss_shots.loc[poss_shots['dist_away'].idxmin()]
+                        closest_idx = poss_shots['dist_away'].idxmin()
+                        check = 1
+                        shots_2.at[closest_idx, "check"] = 1
+                        shots_merge.at[j, "xg"] = shots_2.loc[closest_idx, "xg"]
+                        shots_merge.at[j, "minute_2"] = shots_2.loc[closest_idx, "minute"]
+                        shots_merge.at[j, "player_2"] = shots_2.loc[closest_idx, "player"]
+                        shots_merge.at[j, "x_2"] = shots_2.loc[closest_idx, "scale_x"]
+                        shots_merge.at[j, "y_2"] = shots_2.loc[closest_idx, "scale_y"]
+                        break
+                            
+                            
+
+                    else:
+                        check = 1
+                        shots_2.at[k, "check"] = 1
+                        #get xg
+                        shots_merge.at[j, "xg"] = row2["xg"]
+                        #get additional info
+                        shots_merge.at[j, "minute_2"] = row2["minute"]
+                        shots_merge.at[j, "player_2"] = row2["player"]
+                        shots_merge.at[j, "x_2"] = row2["scale_x"]
+                        shots_merge.at[j, "y_2"] = row2["scale_y"]
+                        
+ 
+#how many non-matches
+print(len(shots_merge[shots_merge.xg < 0])) 
+#shots that have no xg, will need to calculate ourselves
+no_match = shots_merge[shots_merge.xg < 0] 
+
 
 #---- debug -----
 '''
