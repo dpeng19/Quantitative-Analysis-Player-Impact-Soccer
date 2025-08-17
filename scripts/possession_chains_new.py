@@ -174,9 +174,9 @@ merged_shots = pd.merge(
 )
 
 #standardize player names across two sources for shots
-player_mapping = utils.get_player_mappings(shots_merge, merged_shots)
-
-
+player_mapping, debug = utils.build_player_mappings(shots_merge, merged_shots)
+#debug
+#players_not_matched = debug[debug.check == 0]
 #pull schedules to standardize game_id
 understat_schedule = us.read_schedule().reset_index()
 
@@ -241,6 +241,9 @@ shots_df = utils.add_expected_goals_info(shots_merge, merged_shots, player_mappi
 print(len(shots_df[shots_df.xg < 0])) 
 #shots that have no xg, will need to use model to calculate
 no_match = shots_df[shots_df.xg < 0] 
+
+#check shots that were not matched from secondary dataframe
+no_match_2 = merged_shots[merged_shots.check == 0]
 
 
 #---- debug -----

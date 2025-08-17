@@ -7,23 +7,34 @@ Created on Thu Aug 14 18:19:23 2025
 import pandas as pd
 import re
 import textdistance
+import Levenshtein
 from datetime import datetime
 import warnings 
 
-def get_player_mappings(df1, df2):
+def build_player_mappings(df1, df2):
     """
-    Creates a standardized player mapping of the player names across WhoScored and Understat.
-    Uses fuzzy string matching, specifically Jaro-Winkler, to help match players 
-    if no exact match is found. Warns if data sources have different number
-    of players.
-    
+    Generates a standardized mapping of player names between 
+    two data sources using fuzzy string matching.
+
+    This function compares player names from two dataframes and attempts to align them,
+    prioritizing exact matches. If no exact match is found, it uses the Levenshtein ratio to 
+    identify the closest match based on string similarity.
+    A warning is issued if the number of players differs between sources, 
+    which may indicate missing or unmatched entries.
 
     Parameters:
-    df1 (pd.DataFrame): WhoScored data
-    df2 (pd.DataFrame): Understat data
-    
+    ----------
+    df1 : pd.DataFrame
+        The first player data source.
+    df2 : pd.DataFrame
+        The second player data source.
+
     Returns:
-    pd.DataFrame: Mapping of player names across the two sources.
+    -------
+    tuple[pd.DataFrame, pd.DataFrame]
+        - A DataFrame mapping player names from df1 to their best match in df2.
+        - A DataFrame containing diagnostic information about the matching process,
+          including unmatched players
     """
     players_1 = pd.DataFrame(df1['player'].drop_duplicates())
     players_2 = pd.DataFrame(df2['player'].drop_duplicates())
@@ -68,7 +79,7 @@ def get_player_mappings(df1, df2):
             for j in range(len(players_2)):
                 if players_2.loc[j, "check"] == 1:
                     continue
-                similarity_score = textdistance.jaro_winkler(players_1.loc[i, "player"], players_2.loc[j, "player"])
+                similarity_score = Levenshtein.ratio(players_1.loc[i, "player"], players_2.loc[j, "player"])
                 if similarity_score > max_score:
                     max_score = similarity_score
                     best_name = players_2.loc[j, "player"]
@@ -77,7 +88,7 @@ def get_player_mappings(df1, df2):
             #debugging
             #print(players_1.loc[i, "player"] + ' ' + best_name +' '+ str(max_score))
             players_2.at[best_index, "check"] = 2
-    return players_1[['player', 'name_2']]
+    return players_1[['player', 'name_2']], players_2[['player', 'check']]
 
 
 # Validation function for dates
@@ -156,7 +167,7 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
     shots_df1['player_2'] = ''
     shots_df1['x_2'] = -1.0
     shots_df1['y_2'] = -1.0
-
+    shots_df2['check'] = 0
     for i in range(len(player_mapping)):
         shots_1 = shots_df1.loc[shots_df1.player == player_mapping.loc[i, "player"]].copy().sort_values(by=['game_idx', 'minute'])
         shots_2 = shots_df2.loc[shots_df2.player == player_mapping.loc[i, "name_2"]].copy().sort_values(by=['game_idx', 'minute'])
@@ -184,6 +195,7 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
 
                         check = 1
                         shots_2.at[closest_idx, "check"] = 1
+                        shots_df2.at[closest_idx, "check"] = 1
                         shots_df1.at[j, "xg"] = shots_2.loc[closest_idx, "xg"]
                         shots_df1.at[j, "minute_2"] = shots_2.loc[closest_idx, "minute"]
                         shots_df1.at[j, "player_2"] = shots_2.loc[closest_idx, "player"]
@@ -193,6 +205,7 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
                     else:
                         check = 1
                         shots_2.at[k, "check"] = 1
+                        shots_df2.at[k, "check"] = 1
                         shots_df1.at[j, "xg"] = row2["xg"]
                         shots_df1.at[j, "minute_2"] = row2["minute"]
                         shots_df1.at[j, "player_2"] = row2["player"]
@@ -224,6 +237,7 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
 
                             check = 1
                             shots_2.at[closest_idx, "check"] = 1
+                            shots_df2.at[closest_idx, "check"] = 1
                             shots_df1.at[j, "xg"] = shots_2.loc[closest_idx, "xg"]
                             shots_df1.at[j, "minute_2"] = shots_2.loc[closest_idx, "minute"]
                             shots_df1.at[j, "player_2"] = shots_2.loc[closest_idx, "player"]
@@ -233,6 +247,7 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
                         else:
                             check = 1
                             shots_2.at[k, "check"] = 1
+                            shots_df2.at[k, "check"] = 1
                             shots_df1.at[j, "xg"] = row2["xg"]
                             shots_df1.at[j, "minute_2"] = row2["minute"]
                             shots_df1.at[j, "player_2"] = row2["player"]
