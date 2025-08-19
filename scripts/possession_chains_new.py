@@ -245,6 +245,9 @@ no_match = shots_df[shots_df.xg < 0]
 #check shots that were not matched from secondary dataframe
 no_match_2 = merged_shots[merged_shots.check == 0]
 
+#shots from secondary dataset that multiple shots from primary matched to
+double_match = merged_shots[merged_shots.check > 1]
+
 
 #---- debug -----
 '''

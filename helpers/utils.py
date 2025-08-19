@@ -195,7 +195,7 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
 
                         check = 1
                         shots_2.at[closest_idx, "check"] = 1
-                        shots_df2.at[closest_idx, "check"] = 1
+                        shots_df2.at[closest_idx, "check"] = shots_df2.at[closest_idx, "check"] + 1
                         shots_df1.at[j, "xg"] = shots_2.loc[closest_idx, "xg"]
                         shots_df1.at[j, "minute_2"] = shots_2.loc[closest_idx, "minute"]
                         shots_df1.at[j, "player_2"] = shots_2.loc[closest_idx, "player"]
@@ -205,7 +205,7 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
                     else:
                         check = 1
                         shots_2.at[k, "check"] = 1
-                        shots_df2.at[k, "check"] = 1
+                        shots_df2.at[k, "check"] = shots_df2.at[k, "check"] + 1
                         shots_df1.at[j, "xg"] = row2["xg"]
                         shots_df1.at[j, "minute_2"] = row2["minute"]
                         shots_df1.at[j, "player_2"] = row2["player"]
@@ -237,7 +237,7 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
 
                             check = 1
                             shots_2.at[closest_idx, "check"] = 1
-                            shots_df2.at[closest_idx, "check"] = 1
+                            shots_df2.at[closest_idx, "check"] = shots_df2.at[closest_idx, "check"] + 1
                             shots_df1.at[j, "xg"] = shots_2.loc[closest_idx, "xg"]
                             shots_df1.at[j, "minute_2"] = shots_2.loc[closest_idx, "minute"]
                             shots_df1.at[j, "player_2"] = shots_2.loc[closest_idx, "player"]
@@ -247,7 +247,7 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
                         else:
                             check = 1
                             shots_2.at[k, "check"] = 1
-                            shots_df2.at[k, "check"] = 1
+                            shots_df2.at[k, "check"] = shots_df2.at[k, "check"] + 1
                             shots_df1.at[j, "xg"] = row2["xg"]
                             shots_df1.at[j, "minute_2"] = row2["minute"]
                             shots_df1.at[j, "player_2"] = row2["player"]
