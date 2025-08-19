@@ -186,6 +186,10 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
                         (merge_shots_group.player == player_mapping.loc[i, "name_2"]) &
                         (merge_shots_group.minute == row2["minute"])
                     ]['count'].values[0] > 1:
+                        shots_to_match = shots_1.loc[
+                            (shots_1.game_idx == row["game_idx"]) &
+                            (shots_1.minute == row["minute"])
+                        ][['scale_x', 'scale_y']]
                         poss_shots = shots_2.loc[
                             (shots_2.game_idx == row2["game_idx"]) &
                             (shots_2.minute == row2["minute"])
