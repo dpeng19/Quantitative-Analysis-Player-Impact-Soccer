@@ -99,6 +99,25 @@ def is_valid_date(date_str):
     except ValueError:
         return False
     
+def floats_match(a, b):
+    """
+    Compare two floats for equality based on the number of decimal places
+    in the float with fewer digits after the decimal point.
+
+    Parameters:
+        a (float): The first floating-point number to compare.
+        b (float): The second floating-point number to compare.
+
+    Returns:
+        bool: True if the numbers are equal when rounded to the smaller number
+              of decimal places; False otherwise.
+    """
+    s_a, s_b = str(a), str(b)
+    d_a = len(s_a.split('.')[-1].rstrip('0')) if '.' in s_a else 0
+    d_b = len(s_b.split('.')[-1].rstrip('0')) if '.' in s_b else 0
+    decimals = min(d_a, d_b)
+    return round(a, decimals) == round(b, decimals)
+    
 def standardized_game_idx(sch1, sch2):
     """
     Aligns two game schedules by standardizing the 'game_idx' column across both DataFrames.
@@ -138,19 +157,41 @@ def standardized_game_idx(sch1, sch2):
             sch2.at[best_index, "game_idx"] = sch1.loc[i, "game_idx"]
     return sch1, sch2
 def prioritize_exact_match(shot_1, shot_2):
-    #tolerance for checking equivalent coordinates
-    TOLERANCE = 0.0000001
+    """
+    Assigns priority values to shots in the primary DataFrame (`shot_1`) based on exact matches
+    with shots in the secondary DataFrame (`shot_2`).
+
+    A shot is considered an exact match if:
+        - `game_idx` and `minute` are equal in both DataFrames, and
+        - `scale_x` and `scale_y` in `shot_2` match `start_x` and `start_y` in `shot_1` (using float precision comparison).
+
+    Additionally, near matches are considered if:
+        - `game_idx` is equal, and
+        - `minute` differs by ±1 with `second` near the boundary (≥55 or ≤5), and
+        - coordinates still match.
+
+    Shots with exact or near matches are assigned a priority of 0.
+    All other shots retain a default priority based on the length of `shot_1`.
+
+    Parameters:
+        shot_1 (pd.DataFrame): Primary DataFrame containing shots to be prioritized.
+        shot_2 (pd.DataFrame): Secondary DataFrame containing reference shots for matching.
+
+    Returns:
+        pd.DataFrame: A sorted version of `shot_1` with updated 'priority' values,
+                      sorted by 'game_idx', 'minute', and 'priority'.
+    """
     shot_1['priority'] = len(shot_1)
     for i, row in shot_1.iterrows():
         for j, row2 in shot_2.iterrows():
             if row2["game_idx"] == row["game_idx"] and row2["minute"] == row["minute"] and (
-                abs(row2["scale_x"] - row["start_x"]) < TOLERANCE and abs(row2["scale_y"] - row["start_y"]) < TOLERANCE):
+                floats_match(row2["scale_x"], row["start_x"]) and floats_match(row2["scale_y"], row["start_y"])):
                     shot_1.at[i, "priority"] = 0
                     break
             if row2["game_idx"] == row["game_idx"] and (
                 (row2["minute"] == row["minute"] + 1 and row['second'] >= 55) or
                 (row2["minute"] == row["minute"] - 1 and row['second'] <= 5)
-                ) and abs(row2["scale_x"] - row["start_x"]) < TOLERANCE and abs(row2["scale_y"] - row["start_y"]) < TOLERANCE:
+                ) and floats_match(row2["scale_x"], row["start_x"]) and floats_match(row2["scale_y"], row["start_y"]):
                     shot_1.at[i, "priority"] = 0
                     break
     return shot_1.sort_values(by=['game_idx', 'minute', 'priority'])

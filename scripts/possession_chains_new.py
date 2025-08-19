@@ -237,6 +237,8 @@ merged_shots['scale_y'] = merged_shots['location_y'] * 68
 
 #add xg info to existing primary shot dataframe
 shots_df = utils.add_expected_goals_info(shots_merge, merged_shots, player_mapping, merge_shots_group)
+
+
 #how many non-matches?
 print(len(shots_df[shots_df.xg < 0])) 
 #shots that have no xg, will need to use model to calculate
