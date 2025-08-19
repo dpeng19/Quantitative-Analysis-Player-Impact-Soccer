@@ -137,7 +137,12 @@ def standardized_game_idx(sch1, sch2):
                         
             sch2.at[best_index, "game_idx"] = sch1.loc[i, "game_idx"]
     return sch1, sch2
-
+def get_priority(shot_1, shot_2):
+    #list of indexes to be prioritized
+    idx_prioritized = []
+    group_1 = shot_1.groupby(['game_idx', 'minute', 'second', 'start_x', 'start_y'])
+    group_2 = shot_2.groupby(['game_idx', 'minute', 'scale_x', 'scale_y'])
+    
 def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_group):
     """
     Matches shots from shots_df1 to shots in shots_df2 using player_mapping.
@@ -194,8 +199,14 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
                             (shots_2.game_idx == row2["game_idx"]) &
                             (shots_2.minute == row2["minute"])
                         ][['scale_x', 'scale_y']]
-                        poss_shots['dist_away'] = (poss_shots['scale_x'] - row["start_x"])**2 + (poss_shots['scale_y'] - row["start_y"])**2
-                        closest_idx = poss_shots['dist_away'].idxmin()
+                        for a, shot in shots_to_match.iterrows():
+                            poss_shots['dist_away'] = (poss_shots['scale_x'] - row["start_x"])**2 + (poss_shots['scale_y'] - row["start_y"])**2
+                            closest_idx = poss_shots['dist_away'].idxmin()
+                            #essentially want to see distance is 0
+                            THRESHOLD = 0.000001
+                            if shots_2.loc[closest_idx, "check"] == 0 and poss_shots.loc[closest_idx, "dist_away"] < THRESHOLD:
+                                
+                                
 
                         check = 1
                         shots_2.at[closest_idx, "check"] = 1
