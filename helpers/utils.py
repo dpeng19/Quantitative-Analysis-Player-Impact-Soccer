@@ -137,12 +137,26 @@ def standardized_game_idx(sch1, sch2):
                         
             sch2.at[best_index, "game_idx"] = sch1.loc[i, "game_idx"]
     return sch1, sch2
-def get_priority(shot_1, shot_2):
-    #list of indexes to be prioritized
-    idx_prioritized = []
-    group_1 = shot_1.groupby(['game_idx', 'minute', 'second', 'start_x', 'start_y'])
-    group_2 = shot_2.groupby(['game_idx', 'minute', 'scale_x', 'scale_y'])
-    
+def prioritize_exact_match(shot_1, shot_2):
+    #tolerance for checking equivalent coordinates
+    TOLERANCE = 0.0000001
+    shot_1['priority'] = len(shot_1)
+    for i, row in shot_1.iterrows():
+        for j, row2 in shot_2.iterrows():
+            if row2["game_idx"] == row["game_idx"] and row2["minute"] == row["minute"] and (
+                abs(row2["scale_x"] - row["start_x"]) < TOLERANCE and abs(row2["scale_y"] - row["start_y"]) < TOLERANCE):
+                    shot_1.at[i, "priority"] = 0
+                    break
+            if row2["game_idx"] == row["game_idx"] and (
+                (row2["minute"] == row["minute"] + 1 and row['second'] >= 55) or
+                (row2["minute"] == row["minute"] - 1 and row['second'] <= 5)
+                ) and abs(row2["scale_x"] - row["start_x"]) < TOLERANCE and abs(row2["scale_y"] - row["start_y"]) < TOLERANCE:
+                    shot_1.at[i, "priority"] = 0
+                    break
+    return shot_1.sort_values(by=['game_idx', 'minute', 'priority'])
+            
+            
+
 def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_group):
     """
     Matches shots from shots_df1 to shots in shots_df2 using player_mapping.
@@ -176,6 +190,8 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
     for i in range(len(player_mapping)):
         shots_1 = shots_df1.loc[shots_df1.player == player_mapping.loc[i, "player"]].copy().sort_values(by=['game_idx', 'minute'])
         shots_2 = shots_df2.loc[shots_df2.player == player_mapping.loc[i, "name_2"]].copy().sort_values(by=['game_idx', 'minute'])
+        #apply function to prioritize exact matches
+        shots_1 = prioritize_exact_match(shots_1, shots_2)
         shots_2['check'] = 0
 
         for j, row in shots_1.iterrows():
@@ -191,32 +207,25 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
                         (merge_shots_group.player == player_mapping.loc[i, "name_2"]) &
                         (merge_shots_group.minute == row2["minute"])
                     ]['count'].values[0] > 1:
-                        shots_to_match = shots_1.loc[
-                            (shots_1.game_idx == row["game_idx"]) &
-                            (shots_1.minute == row["minute"])
-                        ][['scale_x', 'scale_y']]
                         poss_shots = shots_2.loc[
                             (shots_2.game_idx == row2["game_idx"]) &
                             (shots_2.minute == row2["minute"])
                         ][['scale_x', 'scale_y']]
-                        for a, shot in shots_to_match.iterrows():
-                            poss_shots['dist_away'] = (poss_shots['scale_x'] - row["start_x"])**2 + (poss_shots['scale_y'] - row["start_y"])**2
-                            closest_idx = poss_shots['dist_away'].idxmin()
-                            #essentially want to see distance is 0
-                            THRESHOLD = 0.000001
-                            if shots_2.loc[closest_idx, "check"] == 0 and poss_shots.loc[closest_idx, "dist_away"] < THRESHOLD:
-                                
-                                
-
-                        check = 1
-                        shots_2.at[closest_idx, "check"] = 1
-                        shots_df2.at[closest_idx, "check"] = shots_df2.at[closest_idx, "check"] + 1
-                        shots_df1.at[j, "xg"] = shots_2.loc[closest_idx, "xg"]
-                        shots_df1.at[j, "minute_2"] = shots_2.loc[closest_idx, "minute"]
-                        shots_df1.at[j, "player_2"] = shots_2.loc[closest_idx, "player"]
-                        shots_df1.at[j, "x_2"] = shots_2.loc[closest_idx, "scale_x"]
-                        shots_df1.at[j, "y_2"] = shots_2.loc[closest_idx, "scale_y"]
-                        break
+                        poss_shots['dist_away'] = (poss_shots['scale_x'] - row["start_x"])**2 + (poss_shots['scale_y'] - row["start_y"])**2
+                        sorted_poss_shots = poss_shots.sort_values(by='dist_away')
+                        for idx, shot in sorted_poss_shots.iterrows():
+                            if shots_2.loc[idx, "check"] == 0:
+                                check = 1
+                                shots_2.at[idx, "check"] = 1
+                                shots_df2.at[idx, "check"] = shots_df2.at[idx, "check"] + 1
+                                shots_df1.at[j, "xg"] = shots_2.loc[idx, "xg"]
+                                shots_df1.at[j, "minute_2"] = shots_2.loc[idx, "minute"]
+                                shots_df1.at[j, "player_2"] = shots_2.loc[idx, "player"]
+                                shots_df1.at[j, "x_2"] = shots_2.loc[idx, "scale_x"]
+                                shots_df1.at[j, "y_2"] = shots_2.loc[idx, "scale_y"]
+                                break
+                        if check == 1:
+                            break
                     else:
                         check = 1
                         shots_2.at[k, "check"] = 1
@@ -243,22 +252,26 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
                             (merge_shots_group.player == player_mapping.loc[i, "name_2"]) &
                             (merge_shots_group.minute == row2["minute"])
                         ]['count'].values[0] > 1:
+                            #possible shots to match to
                             poss_shots = shots_2.loc[
                                 (shots_2.game_idx == row2["game_idx"]) &
                                 (shots_2.minute == row2["minute"])
                             ][['scale_x', 'scale_y']]
                             poss_shots['dist_away'] = (poss_shots['scale_x'] - row["start_x"])**2 + (poss_shots['scale_y'] - row["start_y"])**2
-                            closest_idx = poss_shots['dist_away'].idxmin()
-
-                            check = 1
-                            shots_2.at[closest_idx, "check"] = 1
-                            shots_df2.at[closest_idx, "check"] = shots_df2.at[closest_idx, "check"] + 1
-                            shots_df1.at[j, "xg"] = shots_2.loc[closest_idx, "xg"]
-                            shots_df1.at[j, "minute_2"] = shots_2.loc[closest_idx, "minute"]
-                            shots_df1.at[j, "player_2"] = shots_2.loc[closest_idx, "player"]
-                            shots_df1.at[j, "x_2"] = shots_2.loc[closest_idx, "scale_x"]
-                            shots_df1.at[j, "y_2"] = shots_2.loc[closest_idx, "scale_y"]
-                            break
+                            sorted_poss_shots = poss_shots.sort_values(by='dist_away')
+                            for idx, shot in sorted_poss_shots.iterrows():
+                                if shots_2.loc[idx, "check"] == 0:
+                                    check = 1
+                                    shots_2.at[idx, "check"] = 1
+                                    shots_df2.at[idx, "check"] = shots_df2.at[idx, "check"] + 1
+                                    shots_df1.at[j, "xg"] = shots_2.loc[idx, "xg"]
+                                    shots_df1.at[j, "minute_2"] = shots_2.loc[idx, "minute"]
+                                    shots_df1.at[j, "player_2"] = shots_2.loc[idx, "player"]
+                                    shots_df1.at[j, "x_2"] = shots_2.loc[idx, "scale_x"]
+                                    shots_df1.at[j, "y_2"] = shots_2.loc[idx, "scale_y"]
+                                    break
+                            if check == 1:
+                                break
                         else:
                             check = 1
                             shots_2.at[k, "check"] = 1
