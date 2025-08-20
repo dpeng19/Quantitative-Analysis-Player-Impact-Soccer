@@ -194,7 +194,7 @@ def prioritize_exact_match(shot_1, shot_2):
                 ) and floats_match(row2["scale_x"], row["start_x"]) and floats_match(row2["scale_y"], row["start_y"]):
                     shot_1.at[i, "priority"] = 0
                     break
-    return shot_1.sort_values(by=['game_idx', 'minute', 'priority'])
+    return shot_1.sort_values(by=['game_idx', 'minute','second','priority'])
             
             
 
@@ -232,7 +232,48 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
         shots_1 = shots_df1.loc[shots_df1.player == player_mapping.loc[i, "player"]].copy().sort_values(by=['game_idx', 'minute'])
         shots_2 = shots_df2.loc[shots_df2.player == player_mapping.loc[i, "name_2"]].copy().sort_values(by=['game_idx', 'minute'])
         #apply function to prioritize exact matches
-        shots_1 = prioritize_exact_match(shots_1, shots_2)
+        #shots_1 = prioritize_exact_match(shots_1, shots_2)
+        shots_2['check'] = 0
+
+        for j, row in shots_1.iterrows():
+            poss_shots = shots_2.loc[
+                (shots_2.game_idx == row["game_idx"]) &
+                (shots_2.scale_x == row["start_x"]) &
+                (shots_2.scale_y == row["start_y"])
+            ]
+            for k, row2 in poss_shots.iterrows():
+                if shots_2.at[k, "check"] == 1:
+                    continue
+                if (row["second"] <= 5 and (row2["minute"] == row["minute"] or row2["minute"] == row["minute"] - 1) or 
+                    row["second"] >= 55 and (row2["minute"] == row["minute"] or row2["minute"] == row["minute"] + 1) or
+                    row2["minute"] == row["minute"]
+                ):
+                    shots_2.at[k, "check"] = 1
+                    shots_df2.at[k, "check"] = shots_df2.at[k, "check"] + 1
+                    shots_df1.at[j, "xg"] = row2["xg"]
+                    shots_df1.at[j, "minute_2"] = row2["minute"]
+                    shots_df1.at[j, "player_2"] = row2["player"]
+                    shots_df1.at[j, "x_2"] = row2["scale_x"]
+                    shots_df1.at[j, "y_2"] = row2["scale_y"]
+                    break
+                
+                
+
+            
+
+    return shots_df1
+    '''
+    shots_df1['xg'] = -1.0
+    shots_df1['minute_2'] = -1
+    shots_df1['player_2'] = ''
+    shots_df1['x_2'] = -1.0
+    shots_df1['y_2'] = -1.0
+    shots_df2['check'] = 0
+    for i in range(len(player_mapping)):
+        shots_1 = shots_df1.loc[shots_df1.player == player_mapping.loc[i, "player"]].copy().sort_values(by=['game_idx', 'minute'])
+        shots_2 = shots_df2.loc[shots_df2.player == player_mapping.loc[i, "name_2"]].copy().sort_values(by=['game_idx', 'minute'])
+        #apply function to prioritize exact matches
+        #shots_1 = prioritize_exact_match(shots_1, shots_2)
         shots_2['check'] = 0
 
         for j, row in shots_1.iterrows():
@@ -324,6 +365,7 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
                             shots_df1.at[j, "y_2"] = row2["scale_y"]
 
     return shots_df1
+'''
     
     
     
