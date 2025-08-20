@@ -244,9 +244,9 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
             for k, row2 in poss_shots.iterrows():
                 if shots_2.at[k, "check"] == 1:
                     continue
-                if (row["second"] <= 5 and (row2["minute"] == row["minute"] or row2["minute"] == row["minute"] - 1) or 
-                    row["second"] >= 55 and (row2["minute"] == row["minute"] or row2["minute"] == row["minute"] + 1) or
-                    row2["minute"] == row["minute"]
+                if ((row["second"] <= 5 and (row2["minute"] == row["minute"] or row2["minute"] == row["minute"] - 1)) or 
+                    (row["second"] >= 55 and (row2["minute"] == row["minute"] or row2["minute"] == row["minute"] + 1)) or
+                    (row2["minute"] == row["minute"])
                 ):
                     shots_2.at[k, "check"] = 1
                     shots_df2.at[k, "check"] = shots_df2.at[k, "check"] + 1
@@ -256,11 +256,64 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
                     shots_df1.at[j, "x_2"] = row2["scale_x"]
                     shots_df1.at[j, "y_2"] = row2["scale_y"]
                     break
+        
                 
-                
-
+        for j, row in shots_1.iterrows():
             
-
+            check = 0
+            #shot has already been matched
+            if row["xg"] >= 0:
+                continue
+            poss_shots = shots_2.loc[
+                (shots_2.game_idx == row["game_idx"]) &
+                (shots_2.check == 0) &
+                (shots_2.minute == row["minute"])
+            ][['scale_x', 'scale_y']]
+            poss_shots['dist_away'] = (poss_shots['scale_x'] - row["start_x"])**2 + (poss_shots['scale_y'] - row["start_y"])**2
+            sorted_poss_shots = poss_shots.sort_values(by='dist_away')
+            for idx, shot in sorted_poss_shots.iterrows():
+                if shots_2.loc[idx, "check"] == 0:
+                    check = 1
+                    shots_2.at[idx, "check"] = 1
+                    shots_df2.at[idx, "check"] = shots_df2.at[idx, "check"] + 1
+                    shots_df1.at[j, "xg"] = shots_2.loc[idx, "xg"]
+                    shots_df1.at[j, "minute_2"] = shots_2.loc[idx, "minute"]
+                    shots_df1.at[j, "player_2"] = shots_2.loc[idx, "player"]
+                    shots_df1.at[j, "x_2"] = shots_2.loc[idx, "scale_x"]
+                    shots_df1.at[j, "y_2"] = shots_2.loc[idx, "scale_y"]
+                    break
+            if check == 0:
+                
+                if row["second"] >= 55:
+                    poss_shots_2 = shots_2.loc[
+                        (shots_2.game_idx == row["game_idx"]) &
+                        (shots_2.check == 0) &
+                        (shots_2.minute == row["minute"] + 1)
+                    ][['scale_x', 'scale_y']]    
+                elif row["second"] <= 5:
+                    poss_shots_2 = shots_2.loc[
+                        (shots_2.game_idx == row["game_idx"]) &
+                        (shots_2.check == 0) &
+                        (shots_2.minute == row["minute"] - 1)
+                    ][['scale_x', 'scale_y']]   
+                else:
+                    continue
+                
+                poss_shots_2['dist_away'] = (poss_shots_2['scale_x'] - row["start_x"])**2 + (poss_shots_2['scale_y'] - row["start_y"])**2
+                sorted_poss_shots = poss_shots_2.sort_values(by='dist_away')
+                for idx, shot in sorted_poss_shots.iterrows():
+                    if shots_2.loc[idx, "check"] == 0:
+                        check = 1
+                        shots_2.at[idx, "check"] = 1
+                        shots_df2.at[idx, "check"] = shots_df2.at[idx, "check"] + 1
+                        shots_df1.at[j, "xg"] = shots_2.loc[idx, "xg"]
+                        shots_df1.at[j, "minute_2"] = shots_2.loc[idx, "minute"]
+                        shots_df1.at[j, "player_2"] = shots_2.loc[idx, "player"]
+                        shots_df1.at[j, "x_2"] = shots_2.loc[idx, "scale_x"]
+                        shots_df1.at[j, "y_2"] = shots_2.loc[idx, "scale_y"]
+                        break    
+                      
+                  
     return shots_df1
     '''
     shots_df1['xg'] = -1.0
