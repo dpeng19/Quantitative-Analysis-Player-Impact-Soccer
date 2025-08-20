@@ -238,8 +238,8 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
         for j, row in shots_1.iterrows():
             poss_shots = shots_2.loc[
                 (shots_2.game_idx == row["game_idx"]) &
-                (shots_2.scale_x == row["start_x"]) &
-                (shots_2.scale_y == row["start_y"])
+                (floats_match(shots_2.scale_x, row["start_x"])) &
+                (floats_match(shots_2.scale_y, row["start_y"]))
             ]
             for k, row2 in poss_shots.iterrows():
                 if shots_2.at[k, "check"] == 1:
