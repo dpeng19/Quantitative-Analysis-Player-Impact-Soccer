@@ -250,6 +250,9 @@ no_match_2 = merged_shots[merged_shots.check == 0]
 #shots from secondary dataset that multiple shots from primary matched to
 double_match = merged_shots[merged_shots.check > 1]
 
+#must have gotten time wrong since no shots should be this early -todo
+wrong_time = shots_df[(shots_df.minute == 0) & (shots_df.second == 0)]
+
 
 #---- debug -----
 '''
