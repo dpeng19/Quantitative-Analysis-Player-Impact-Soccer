@@ -133,15 +133,16 @@ cols.insert(8, col3)
 cols.insert(9, col4)
 
 # Reorder the DataFrame
-poss2 = poss[cols]
+events_df = poss[cols]
 #check
-poss2['team_equal'] = poss2['possesion_chain_team'] == poss2['team_id']
+events_df['team_equal'] = events_df['possesion_chain_team'] == events_df['team_id']
 #check to make sure everything is right
-poss2['team_equal'].value_counts()
+events_df['team_equal'].value_counts()
 
 
-shots_merge = merged_df[merged_df.type_id.isin([11, 12, 13])]
-shots_merge = shots_merge.reset_index(drop=True)
+shots_merge = events_df[events_df.type_id.isin([11, 12, 13])]
+#shots_merge.type.value_counts()
+#shots_merge = shots_merge.reset_index(drop=True)
 
 #---- ensure the types of shots look right, throw error otherwise ----
 # Define the allowed shot types
@@ -211,12 +212,14 @@ merged_shots = pd.merge(
     how = 'left'
 )
 
+original_idx = shots_merge.index
 shots_merge = pd.merge(
     shots_merge,
     whoscored_schedule[['game_id', 'game_idx', 'home_team', 'away_team']],
     on = 'game_id', 
     how = 'left'
 )       
+shots_merge.index = original_idx
 
 #---- check if game_id, player, and minute uniquely identifies a shot event ----
 merge_shots_group = merged_shots.groupby(["game_idx", "player", "minute"]).size().reset_index(name = 'count')
@@ -259,11 +262,10 @@ wrong_time = shots_df[(shots_df.minute == 0) & (shots_df.second == 0)]
 not_equal = poss2[poss2.team_equal == 0]
 season_events_1821101 = season_events[season_events.game_id == 1821101]
 '''
-own_goals = poss2[poss2.result_id == 3]
-shots = poss2[poss2.type_id.isin(shot_ids)]
+
 shots_normal = season_events[season_events.type == '']
 #head is 1, seems like 5 is foot, 4 is other, 2 is none
-shots.bodypart_id.value_counts()
+shots_df.bodypart_id.value_counts()
 #df['kicked_out'].value_counts()
 #out_plays = df.loc[(df['end_x'] == 0) | (df['end_x'] == 105) | (df['end_y'] == 0) | (df['end_y'] == 68)]
 def calulatexG(df):
