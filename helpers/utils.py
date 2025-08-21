@@ -99,6 +99,25 @@ def is_valid_date(date_str):
     except ValueError:
         return False
     
+def floats_match(a, b):
+    """
+    Compare two floats for equality based on the number of decimal places
+    in the float with fewer digits after the decimal point.
+
+    Parameters:
+        a (float): The first floating-point number to compare.
+        b (float): The second floating-point number to compare.
+
+    Returns:
+        bool: True if the numbers are equal when rounded to the smaller number
+              of decimal places; False otherwise.
+    """
+    s_a, s_b = str(a), str(b)
+    d_a = len(s_a.split('.')[-1].rstrip('0')) if '.' in s_a else 0
+    d_b = len(s_b.split('.')[-1].rstrip('0')) if '.' in s_b else 0
+    decimals = min(d_a, d_b)
+    return round(a, decimals) == round(b, decimals)
+    
 def standardized_game_idx(sch1, sch2):
     """
     Aligns two game schedules by standardizing the 'game_idx' column across both DataFrames.
@@ -137,31 +156,35 @@ def standardized_game_idx(sch1, sch2):
                         
             sch2.at[best_index, "game_idx"] = sch1.loc[i, "game_idx"]
     return sch1, sch2
-
+            
 def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_group):
     """
-    Matches shots from shots_df1 to shots in shots_df2 using player_mapping.
-    Enriches shots_df1 with expected goal (xG) values when a match is found.
+    Matches shots from shots_df1 to corresponding shots in shots_df2 to enrich shots_df1 
+    with expected goal (xG) values, using player-specific mappings and a two-stage process.
 
-    Matching is based on:
-    - Player identity (mapped via player_mapping)
-    - Game index
-    - Minute (exact match or ±1 with second tolerance)
-    - If multiple candidates exist, the closest shot is selected using Euclidean distance between coordinates.
+    Matching logic:
+    - Loop through each player in player_mapping.
+    - For each player, extract only their shots from both datasets using mapped names.
+    - First pass: match each shot in shots_df1 to a shot in shots_df2 by game index, minute (with tolerance), 
+      and exact coordinates (start_x/start_y vs. scale_x/scale_y).
+    - Second pass: for unmatched shots, match by game index and minute (with tolerance); 
+      choose the closest candidate in shots_df2 using Euclidean distance.
+    - Each shot in shots_df2 can only be matched once.
 
-    While shots_df1 already contains positional data, coordinates from shots_df2 
-    are added for verification purposes only.
-    Shots that cannot be matched retain an xG value of -1.0.
+    Notes:
+    - Coordinates from shots_df2 are added to shots_df1 for verification.
+    - Unmatched shots retain xG = -1.0.
 
     Parameters:
-    - shots_df1 (pd.DataFrame): Primary dataset to be enriched with xG values.
-    - shots_df2 (pd.DataFrame): Secondary dataset containing xG and positional data.
-    - player_mapping (pd.DataFrame): Maps player names between the two datasets.
-    - merge_shots_group (pd.DataFrame): Aggregated shot counts used to resolve minute-level duplicates.
+    - shots_df1 (pd.DataFrame): Primary dataset to enrich.
+    - shots_df2 (pd.DataFrame): Secondary dataset with xG and positional data.
+    - player_mapping (pd.DataFrame): Maps player names between datasets.
+    - merge_shots_group (pd.DataFrame): Used to resolve minute-level duplicates.
 
     Returns:
-    - pd.DataFrame: Updated shots_df1 with xG and verification data from shots_df2.
+    - pd.DataFrame: Updated shots_df1 with xG values and verification coordinates.
     """
+
     shots_df1['xg'] = -1.0
     shots_df1['minute_2'] = -1
     shots_df1['player_2'] = ''
@@ -174,87 +197,86 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
         shots_2['check'] = 0
 
         for j, row in shots_1.iterrows():
-            check = 0
-            for k, row2 in shots_2.iterrows():
-                if row2["check"] != 0:
+            poss_shots = shots_2.loc[
+                (shots_2.game_idx == row["game_idx"]) &
+                (floats_match(shots_2.scale_x, row["start_x"])) &
+                (floats_match(shots_2.scale_y, row["start_y"]))
+            ]
+            for k, row2 in poss_shots.iterrows():
+                if shots_2.at[k, "check"] == 1:
                     continue
-                if row2["game_idx"] > row["game_idx"]:
+                if ((row["second"] <= 5 and (row2["minute"] == row["minute"] or row2["minute"] == row["minute"] - 1)) or 
+                    (row["second"] >= 55 and (row2["minute"] == row["minute"] or row2["minute"] == row["minute"] + 1)) or
+                    (row2["minute"] == row["minute"])
+                ):
+                    shots_2.at[k, "check"] = 1
+                    shots_df2.at[k, "check"] = shots_df2.at[k, "check"] + 1
+                    shots_df1.at[j, "xg"] = row2["xg"]
+                    shots_df1.at[j, "minute_2"] = row2["minute"]
+                    shots_df1.at[j, "player_2"] = row2["player"]
+                    shots_df1.at[j, "x_2"] = row2["scale_x"]
+                    shots_df1.at[j, "y_2"] = row2["scale_y"]
                     break
-                if row2["game_idx"] == row["game_idx"] and row2["minute"] == row["minute"]:
-                    if merge_shots_group.loc[
-                        (merge_shots_group.game_idx == row2["game_idx"]) &
-                        (merge_shots_group.player == player_mapping.loc[i, "name_2"]) &
-                        (merge_shots_group.minute == row2["minute"])
-                    ]['count'].values[0] > 1:
-                        poss_shots = shots_2.loc[
-                            (shots_2.game_idx == row2["game_idx"]) &
-                            (shots_2.minute == row2["minute"])
-                        ][['scale_x', 'scale_y']]
-                        poss_shots['dist_away'] = (poss_shots['scale_x'] - row["start_x"])**2 + (poss_shots['scale_y'] - row["start_y"])**2
-                        closest_idx = poss_shots['dist_away'].idxmin()
-
-                        check = 1
-                        shots_2.at[closest_idx, "check"] = 1
-                        shots_df2.at[closest_idx, "check"] = shots_df2.at[closest_idx, "check"] + 1
-                        shots_df1.at[j, "xg"] = shots_2.loc[closest_idx, "xg"]
-                        shots_df1.at[j, "minute_2"] = shots_2.loc[closest_idx, "minute"]
-                        shots_df1.at[j, "player_2"] = shots_2.loc[closest_idx, "player"]
-                        shots_df1.at[j, "x_2"] = shots_2.loc[closest_idx, "scale_x"]
-                        shots_df1.at[j, "y_2"] = shots_2.loc[closest_idx, "scale_y"]
-                        break
-                    else:
-                        check = 1
-                        shots_2.at[k, "check"] = 1
-                        shots_df2.at[k, "check"] = shots_df2.at[k, "check"] + 1
-                        shots_df1.at[j, "xg"] = row2["xg"]
-                        shots_df1.at[j, "minute_2"] = row2["minute"]
-                        shots_df1.at[j, "player_2"] = row2["player"]
-                        shots_df1.at[j, "x_2"] = row2["scale_x"]
-                        shots_df1.at[j, "y_2"] = row2["scale_y"]
-                        break
-
+        
+                
+        for j, row in shots_1.iterrows():
+            
+            check = 0
+            #shot has already been matched
+            if shots_df1.at[j, "xg"] >= 0:
+                continue
+            poss_shots = shots_2.loc[
+                (shots_2.game_idx == row["game_idx"]) &
+                (shots_2.check == 0) &
+                (shots_2.minute == row["minute"])
+            ][['scale_x', 'scale_y']]
+            poss_shots['dist_away'] = (poss_shots['scale_x'] - row["start_x"])**2 + (poss_shots['scale_y'] - row["start_y"])**2
+            sorted_poss_shots = poss_shots.sort_values(by='dist_away')
+            for idx, shot in sorted_poss_shots.iterrows():
+                if shots_2.loc[idx, "check"] == 0:
+                    check = 1
+                    shots_2.at[idx, "check"] = 1
+                    shots_df2.at[idx, "check"] = shots_df2.at[idx, "check"] + 1
+                    shots_df1.at[j, "xg"] = shots_2.loc[idx, "xg"]
+                    shots_df1.at[j, "minute_2"] = shots_2.loc[idx, "minute"]
+                    shots_df1.at[j, "player_2"] = shots_2.loc[idx, "player"]
+                    shots_df1.at[j, "x_2"] = shots_2.loc[idx, "scale_x"]
+                    shots_df1.at[j, "y_2"] = shots_2.loc[idx, "scale_y"]
+                    break
             if check == 0:
-                for k, row2 in shots_2.iterrows():
-                    if row2["check"] != 0:
-                        continue
-                    if row2["game_idx"] > row["game_idx"]:
-                        break
-                    if row2["game_idx"] == row["game_idx"] and (
-                        (row2["minute"] == row["minute"] + 1 and row['second'] >= 55) or
-                        (row2["minute"] == row["minute"] - 1 and row['second'] <= 5)
-                    ):
-                        if merge_shots_group.loc[
-                            (merge_shots_group.game_idx == row2["game_idx"]) &
-                            (merge_shots_group.player == player_mapping.loc[i, "name_2"]) &
-                            (merge_shots_group.minute == row2["minute"])
-                        ]['count'].values[0] > 1:
-                            poss_shots = shots_2.loc[
-                                (shots_2.game_idx == row2["game_idx"]) &
-                                (shots_2.minute == row2["minute"])
-                            ][['scale_x', 'scale_y']]
-                            poss_shots['dist_away'] = (poss_shots['scale_x'] - row["start_x"])**2 + (poss_shots['scale_y'] - row["start_y"])**2
-                            closest_idx = poss_shots['dist_away'].idxmin()
-
-                            check = 1
-                            shots_2.at[closest_idx, "check"] = 1
-                            shots_df2.at[closest_idx, "check"] = shots_df2.at[closest_idx, "check"] + 1
-                            shots_df1.at[j, "xg"] = shots_2.loc[closest_idx, "xg"]
-                            shots_df1.at[j, "minute_2"] = shots_2.loc[closest_idx, "minute"]
-                            shots_df1.at[j, "player_2"] = shots_2.loc[closest_idx, "player"]
-                            shots_df1.at[j, "x_2"] = shots_2.loc[closest_idx, "scale_x"]
-                            shots_df1.at[j, "y_2"] = shots_2.loc[closest_idx, "scale_y"]
-                            break
-                        else:
-                            check = 1
-                            shots_2.at[k, "check"] = 1
-                            shots_df2.at[k, "check"] = shots_df2.at[k, "check"] + 1
-                            shots_df1.at[j, "xg"] = row2["xg"]
-                            shots_df1.at[j, "minute_2"] = row2["minute"]
-                            shots_df1.at[j, "player_2"] = row2["player"]
-                            shots_df1.at[j, "x_2"] = row2["scale_x"]
-                            shots_df1.at[j, "y_2"] = row2["scale_y"]
-
+                
+                if row["second"] >= 55:
+                    poss_shots_2 = shots_2.loc[
+                        (shots_2.game_idx == row["game_idx"]) &
+                        (shots_2.check == 0) &
+                        (shots_2.minute == row["minute"] + 1)
+                    ][['scale_x', 'scale_y']]    
+                elif row["second"] <= 5:
+                    poss_shots_2 = shots_2.loc[
+                        (shots_2.game_idx == row["game_idx"]) &
+                        (shots_2.check == 0) &
+                        (shots_2.minute == row["minute"] - 1)
+                    ][['scale_x', 'scale_y']]   
+                else:
+                    continue
+                
+                poss_shots_2['dist_away'] = (poss_shots_2['scale_x'] - row["start_x"])**2 + (poss_shots_2['scale_y'] - row["start_y"])**2
+                sorted_poss_shots = poss_shots_2.sort_values(by='dist_away')
+                for idx, shot in sorted_poss_shots.iterrows():
+                    if shots_2.loc[idx, "check"] == 0:
+                        check = 1
+                        shots_2.at[idx, "check"] = 1
+                        shots_df2.at[idx, "check"] = shots_df2.at[idx, "check"] + 1
+                        shots_df1.at[j, "xg"] = shots_2.loc[idx, "xg"]
+                        shots_df1.at[j, "minute_2"] = shots_2.loc[idx, "minute"]
+                        shots_df1.at[j, "player_2"] = shots_2.loc[idx, "player"]
+                        shots_df1.at[j, "x_2"] = shots_2.loc[idx, "scale_x"]
+                        shots_df1.at[j, "y_2"] = shots_2.loc[idx, "scale_y"]
+                        break    
+                      
+                  
     return shots_df1
+    
     
     
     
