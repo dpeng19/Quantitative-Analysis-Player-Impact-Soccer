@@ -262,7 +262,7 @@ def add_expected_goals_info(shots_df1, shots_df2, player_mapping, merge_shots_gr
             
             check = 0
             #shot has already been matched
-            if row["xg"] >= 0:
+            if shots_df1.at[j, "xg"] >= 0:
                 continue
             poss_shots = shots_2.loc[
                 (shots_2.game_idx == row["game_idx"]) &
