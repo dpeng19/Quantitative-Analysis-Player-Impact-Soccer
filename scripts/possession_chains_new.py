@@ -140,22 +140,7 @@ events_df['team_equal'] = events_df['possesion_chain_team'] == events_df['team_i
 events_df['team_equal'].value_counts()
 
 
-shots_merge = events_df[events_df.type_id.isin([11, 12, 13])]
-#shots_merge.type.value_counts()
-#shots_merge = shots_merge.reset_index(drop=True)
 
-#---- ensure the types of shots look right, throw error otherwise ----
-# Define the allowed shot types
-allowed_types = {'SavedShot', 'MissedShots', 'Goal', 'ShotOnPost'}
-
-# Get the actual types present in the DataFrame
-actual_types = set(shots_merge['type'].unique())
-
-# Check for unexpected types
-unexpected_types = actual_types - allowed_types
-
-if unexpected_types:
-    raise ValueError(f"Unexpected shot types found: {unexpected_types}")
 
 
 #---- pull shots from understat, which has expected goals, want to match the shots ----
@@ -174,10 +159,6 @@ merged_shots = pd.merge(
     how='left'
 )
 
-#standardize player names across two sources for shots
-player_mapping, debug = utils.build_player_mappings(shots_merge, merged_shots)
-#debug
-#players_not_matched = debug[debug.check == 0]
 #pull schedules to standardize game_id
 understat_schedule = us.read_schedule().reset_index()
 
@@ -212,14 +193,36 @@ merged_shots = pd.merge(
     how = 'left'
 )
 
-original_idx = shots_merge.index
-shots_merge = pd.merge(
-    shots_merge,
+#original_idx = shots_merge.index
+events_df = pd.merge(
+    events_df,
     whoscored_schedule[['game_id', 'game_idx', 'home_team', 'away_team']],
     on = 'game_id', 
     how = 'left'
 )       
-shots_merge.index = original_idx
+#shots_merge.index = original_idx
+#get whoscored shots
+shots_merge = events_df[events_df.type_id.isin([11, 12, 13])]
+
+#shots_merge.type.value_counts()
+#---- ensure the types of shots look right, throw error otherwise ----
+# Define the allowed shot types
+allowed_types = {'SavedShot', 'MissedShots', 'Goal', 'ShotOnPost'}
+
+# Get the actual types present in the DataFrame
+actual_types = set(shots_merge['type'].unique())
+
+# Check for unexpected types
+unexpected_types = actual_types - allowed_types
+
+if unexpected_types:
+    raise ValueError(f"Unexpected shot types found: {unexpected_types}")
+    
+    
+#standardize player names across two sources for shots
+player_mapping, debug = utils.build_player_mappings(shots_merge, merged_shots)
+#debug
+#players_not_matched = debug[debug.check == 0]
 
 #---- check if game_id, player, and minute uniquely identifies a shot event ----
 merge_shots_group = merged_shots.groupby(["game_idx", "player", "minute"]).size().reset_index(name = 'count')
@@ -263,11 +266,10 @@ not_equal = poss2[poss2.team_equal == 0]
 season_events_1821101 = season_events[season_events.game_id == 1821101]
 '''
 
-shots_normal = season_events[season_events.type == '']
-#head is 1, seems like 5 is foot, 4 is other, 2 is none
+#head is 1, 4/5 are shots taken by feet, 2 is other
 shots_df.bodypart_id.value_counts()
-#df['kicked_out'].value_counts()
-#out_plays = df.loc[(df['end_x'] == 0) | (df['end_x'] == 105) | (df['end_y'] == 0) | (df['end_y'] == 68)]
+
+shots_
 def calulatexG(df):
     """
     Parameters
@@ -281,7 +283,7 @@ def calulatexG(df):
         dataframe with xG for each shot
 
     """
-    #very basic xG model based on
+    #very basic xG model 
     shots = df.loc[df["type_id"].isin(shot_ids)].copy()
     shots["X"] = 105 - shots['start_x']
     shots["Y"] = shots['start_y']
