@@ -17,6 +17,8 @@ from joblib import load
 from mplsoccer import Pitch
 from itertools import combinations_with_replacement
 from sklearn.linear_model import LinearRegression
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
@@ -259,18 +261,16 @@ double_match = merged_shots[merged_shots.check > 1]
 #must have gotten time wrong since no shots should be this early -todo
 wrong_time = shots_df[(shots_df.minute == 0) & (shots_df.second == 0)]
 
-
-#---- debug -----
-'''
-not_equal = poss2[poss2.team_equal == 0]
-season_events_1821101 = season_events[season_events.game_id == 1821101]
-'''
+#transfer xg from shots dataframe to events dataframe
+events_df["xg"] = 0
+for idx, row in shots_df.iterrows():
+    events_df.at[idx, "xg"] = row["xg"]
+len(events_df[events_df.xg > 0])
 
 #head is 1, 4/5 are shots taken by feet, 2 is other
 shots_df.bodypart_id.value_counts()
 
-shots_
-def calulatexG(df):
+def fill_in_missing_xG(df):
     """
     Parameters
     ----------
@@ -293,7 +293,6 @@ def calulatexG(df):
     shots["Angle"] = np.where(np.arctan(7.32 * shots["X"] / (shots["X"]**2 + shots["C"]**2 - (7.32/2)**2)) > 0, np.arctan(7.32 * shots["X"] /(shots["X"]**2 + shots["C"]**2 - (7.32/2)**2)), np.arctan(7.32 * shots["X"] /(shots["X"]**2 + shots["C"]**2 - (7.32/2)**2)) + np.pi)
    #if you ever encounter problems (like you have seen that model treats 0 as 1 and 1 as 0) while modelling - change the dependant variable to object
     shots["Goal"] = shots['result_id'].astype(object)
-        #headers have id = 403
     headers = shots.loc[shots.bodypart_id == 1]
     non_headers = shots.drop(headers.index)
 
@@ -303,18 +302,19 @@ def calulatexG(df):
     nonheaders_model = smf.glm(formula="Goal ~ Distance + Angle" , data=non_headers,
                                family=sm.families.Binomial()).fit()
     #assigning xG
-    df["xG"] = 0
     b_head = headers_model.params
-    xG = 1/(1+np.exp(b_head[0]+b_head[1]*headers['Distance'] + b_head[2]*headers['Angle']))
-    headers = headers.assign(xG = xG)
+    xg = 1/(1+np.exp(b_head[0]+b_head[1]*headers['Distance'] + b_head[2]*headers['Angle']))
+    headers = headers.assign(xg = xg)
     for index, row in headers.iterrows():
-        df.at[index, "xG"] = row["xG"]
+        if df.at[index, "xg"] < 0:
+            df.at[index, "xg"] = row["xg"]
     #non-headers
     b_nhead = nonheaders_model.params
-    xG = 1/(1+np.exp(b_nhead[0]+b_nhead[1]*non_headers['Distance'] + b_nhead[2]*non_headers['Angle']))
-    non_headers = non_headers.assign(xG = xG)
+    xg = 1/(1+np.exp(b_nhead[0]+b_nhead[1]*non_headers['Distance'] + b_nhead[2]*non_headers['Angle']))
+    non_headers = non_headers.assign(xg = xg)
     for index, row in non_headers.iterrows():
-        df.at[index, "xG"] = row["xG"]
+        if df.at[index, "xg"] < 0:
+            df.at[index, "xg"] = row["xg"]
 
     penalties = df.loc[df.type_id == 12]
     #treating penalties like shots
@@ -328,14 +328,20 @@ def calulatexG(df):
     penalties_model = smf.glm(formula="Goal ~ Distance + Angle" , data=penalties, 
                                family=sm.families.Binomial()).fit()
     b_penalty = penalties_model.params
-    xG = 1/(1+np.exp(b_penalty[0]+b_penalty[1]*penalties['Distance'] + b_penalty[2]*penalties['Angle'])) 
+    xg = 1/(1+np.exp(b_penalty[0]+b_penalty[1]*penalties['Distance'] + b_penalty[2]*penalties['Angle'])) 
     
-    penalties = penalties.assign(xG = xG)
+    penalties = penalties.assign(xg = xg)
     for index, row in penalties.iterrows():
-        df.at[index, "xG"] = row["xG"]
+        if df.at[index, "xg"] < 0:
+            df.at[index, "xg"] = row["xg"]
     return df
 
-df = calulatexG(poss2)
+events_df = fill_in_missing_xG(events_df)
+#check - should equal shots_df length
+len(events_df[events_df.xg > 0])
+newly_calculated = no_match.index.tolist()
+#shots that have xg calculated using custom model rather than from understat
+added_xg_shots = events_df[events_df.index.isin(newly_calculated)]
 #investigate a chain
 df.loc[df["possesion_chain"].isin([3,4])][["eventName", "possesion_chain", "xG"]]
 #check if shots are unique per minute in match
