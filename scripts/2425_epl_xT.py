@@ -58,13 +58,14 @@ move_df["y"] = (move_df['y']) * 68/100
 move_df["end_x"] = move_df['end_x'] * 105/100
 move_df["end_y"] = (move_df['end_y']) * 68/100
 
+
+#----divide moves into zones, and create moves by zone heatmap----
 pitch = Pitch(line_color='black',pitch_type='custom', pitch_length=105, pitch_width=68, line_zorder = 2)
 move = pitch.bin_statistic(move_df.x, move_df.y, statistic='count', bins=(16, 12), normalize=False)
 
 fig, ax = pitch.grid(grid_height=0.9, title_height=0.06, axis=False,
                      endnote_height=0.04, title_space=0, endnote_space=0)
 pcm  = pitch.heatmap(move, cmap='Blues', edgecolor='grey', ax=ax['pitch'])
-#legend to our plot
 ax_cbar = fig.add_axes((1, 0.093, 0.03, 0.786))
 cbar = plt.colorbar(pcm, cax=ax_cbar)
 fig.suptitle('Moving actions 2D histogram', fontsize = 30)
@@ -73,8 +74,7 @@ plt.show()
 move_count = move["statistic"]
 #get the array
 
-#goals_check.dtypes
-#import json
+#get season shots
 shots = season_events[(season_events['type'] == 'Goal') | (season_events['type'].str.contains('Shot')) ]
 #shots_check = season_events[(season_events['x'] == 88.5) & (season_events['y'] == 50 ) & ((season_events['type'] == 'Goal') | (season_events['type'].str.contains('Shot'))) ]
 
@@ -88,19 +88,18 @@ shots['own_goal'] = shots['qualifiers'].apply(
     for q in json.loads(x.replace("'", '"'))) else 0
 )
 own_goals = shots.loc[shots['own_goal'] == 1]
-#get non-penalty shots and shots that result in own goals
+#get non-penalty shots and drop shots that result in own goals
 shot_df = shots.drop(penalty_shots.index)
 shot_df = shot_df.drop(own_goals.index)
 shot_df["x"] = shot_df['x'] * 105/100
 shot_df["y"] = (shot_df['y']) * 68/100
 
-#create 2D histogram of these
+#create 2D histogram of season shots
 shot = pitch.bin_statistic(shot_df.x, shot_df.y, statistic='count', bins=(16, 12), normalize=False)
 
 fig, ax = pitch.grid(grid_height=0.9, title_height=0.06, axis=False,
                      endnote_height=0.04, title_space=0, endnote_space=0)
 pcm  = pitch.heatmap(shot, cmap='Greens', edgecolor='grey', ax=ax['pitch'])
-#legend to our plot
 ax_cbar = fig.add_axes((1, 0.093, 0.03, 0.786))
 cbar = plt.colorbar(pcm, cax=ax_cbar)
 fig.suptitle('Shots 2D histogram', fontsize = 30)
@@ -108,9 +107,8 @@ plt.show()
 
 shot_count = shot["statistic"]
 
+#get goals for this season
 goal_df = shot_df.loc[shot_df['type'] == 'Goal']
-
-
 goal = pitch.bin_statistic(goal_df.x, goal_df.y, statistic = 'count', bins = (16, 12), normalize = False)
 goal_count = goal["statistic"]
 
@@ -161,19 +159,22 @@ cbar = plt.colorbar(pcm, cax=ax_cbar)
 fig.suptitle('Goal probability 2D histogram', fontsize = 30)
 plt.show()
 
+#move start zone
 move_df["start_sector"] = move_df.apply(lambda row: tuple([i[0] for i in binned_statistic_2d(np.ravel(row.x), np.ravel(row.y), 
                                                                values = "None", statistic="count",
                                                                bins=(16, 12), range=[[0, 105], [0, 68]],
                                                                expand_binnumbers=True)[3]]), axis = 1)
-#move end index
+#move end zone
 move_df["end_sector"] = move_df.apply(lambda row: tuple([i[0] for i in binned_statistic_2d(np.ravel(row.end_x), np.ravel(row.end_y), 
                                                                values = "None", statistic="count",
                                                                bins=(16, 12), range=[[0, 105], [0, 68]],
                                                                expand_binnumbers=True)[3]]), axis = 1)
 move_df['id'] = move_df.index
+#df with summed events from each zone
 df_count_starts = move_df.groupby(["start_sector"])["id"].count().reset_index()
 df_count_starts.rename(columns = {'id':'count_starts'}, inplace=True)
 
+#---- create move transition matrix for each zone on the pitch
 transition_matrices = []
 for i, row in df_count_starts.iterrows():
     start_sector = row['start_sector']
@@ -192,13 +193,14 @@ for i, row in df_count_starts.iterrows():
     transition_matrices.append(T_matrix)
     
     
+#----plot transition probability chart for one of the zones----
 fig, ax = pitch.grid(grid_height=0.9, title_height=0.06, axis=False,
                      endnote_height=0.04, title_space=0, endnote_space=0)
 
 #Change the index here to change the zone.
 goal["statistic"] = transition_matrices[90]
 pcm  = pitch.heatmap(goal, cmap='Reds', edgecolor='grey', ax=ax['pitch'])
-#legend to our plot
+
 ax_cbar = fig.add_axes((1, 0.093, 0.03, 0.786))
 cbar = plt.colorbar(pcm, cax=ax_cbar)
 fig.suptitle('Transition probability for one of the middle zones', fontsize = 30)
@@ -206,6 +208,7 @@ plt.show()
 
 #formula
 #df_count_starts['pos'] = (df_count_starts['start_sector'][0] - 1) * 12 + df_count_starts['start_sector'][1] - 1
+#----calculated expected threat matrix----
 transition_matrices_array = np.array(transition_matrices)
 xT = np.zeros((12, 16))
 xT_new = np.zeros((12, 16))
@@ -243,9 +246,12 @@ for i in range(5):
 #calculate XT added for each move
 move_df["xT_added"] = move_df.apply(lambda row: xT[12 - row.end_sector[1]][row.end_sector[0] - 1] 
                                                       - xT[12 - row.start_sector[1]][row.start_sector[0] - 1], axis = 1)
+#get only progressive actions
 move_df = move_df.loc[move_df['xT_added'] > 0]
 #group by player
 xT_by_player = move_df.groupby(["player"])["xT_added"].sum().reset_index()
+#xT leaderboard
 final = xT_by_player.sort_values(by='xT_added', ascending=False)
-#final.to_csv('GER-Bundesliga_24_topxT.csv', index=False)
+#save leaderboard as csv
+final.to_csv('ENG-Premier League_topxT_2024.csv', index=False)
 
